@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MetaFunction } from "@remix-run/node";
 import { Input } from "~/components/ui/input";
 import { Textarea } from "~/components/ui/textarea";
 import { Button } from "~/components/ui/button";
 import { ResponseViewer, type ResponseData } from "~/components/ResponseViewer";
 import { HtmlAnalysis } from "~/components/HtmlAnalysis";
+import { ScriptAnalysis } from "~/components/ScriptAnalysis";
 
 export const meta: MetaFunction = () => [{ title: "HTTP Client" }];
 
@@ -33,12 +34,26 @@ export default function Index() {
   const [method, setMethod] = useState("GET");
   const [url, setUrl] = useState("");
   const [headers, setHeaders] = useState("");
+  const [userAgent, setUserAgent] = useState("");
+  const [useUA, setUseUA] = useState(true);
   const [query, setQuery] = useState("");
   const [body, setBody] = useState("");
   const [response, setResponse] = useState<ResponseData | null>(null);
+  const [analysis, setAnalysis] = useState<
+    {
+      html: string;
+      scripts: { url: string | null; events: string[] }[];
+      inlineEvents: { selector: string; event: string; code: string }[];
+    } | null
+  >(null);
+
+  useEffect(() => {
+    setUserAgent(navigator.userAgent);
+  }, []);
 
   const send = async () => {
     setResponse(null);
+    setAnalysis(null);
     let target = url;
     const q = parseQuery(query);
     if (q) {
@@ -50,12 +65,26 @@ export default function Index() {
       body: JSON.stringify({
         method,
         url: target,
-        headers: parseHeaders(headers),
+        headers: {
+          ...parseHeaders(headers),
+          ...(useUA ? { "User-Agent": userAgent } : {}),
+        },
         body,
       }),
     });
     const data = (await res.json()) as ResponseData;
     setResponse(data);
+  };
+
+  const analyze = async () => {
+    setAnalysis(null);
+    const res = await fetch("/api/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url, userAgent: useUA ? userAgent : undefined }),
+    });
+    const data = await res.json();
+    setAnalysis(data.error ? null : data);
   };
 
   return (
@@ -83,6 +112,22 @@ export default function Index() {
           onChange={(e) => setUrl(e.target.value)}
         />
         <Button onClick={send}>Send</Button>
+        <Button onClick={analyze} variant="secondary">Analyze</Button>
+      </div>
+      <div className="flex items-center space-x-2">
+        <label className="flex items-center space-x-1">
+          <input
+            type="checkbox"
+            className="h-4 w-4"
+            checked={useUA}
+            onChange={(e) => setUseUA(e.target.checked)}
+          />
+          <span className="text-sm">Use my User Agent</span>
+        </label>
+        <Input
+          value={userAgent}
+          onChange={(e) => setUserAgent(e.target.value)}
+        />
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
@@ -129,6 +174,14 @@ export default function Index() {
             {response.contentType?.includes("text/html") && (
               <HtmlAnalysis html={response.body} baseUrl={url} />
             )}
+          </div>
+        )}
+        {analysis && !response && (
+          <div className="space-y-2 col-span-2">
+            <ScriptAnalysis
+              scripts={analysis.scripts}
+              inlineEvents={analysis.inlineEvents}
+            />
           </div>
         )}
       </div>
