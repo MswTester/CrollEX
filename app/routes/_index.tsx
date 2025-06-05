@@ -6,6 +6,7 @@ import { Button } from "~/components/ui/button";
 import { ResponseViewer, type ResponseData } from "~/components/ResponseViewer";
 import { HtmlAnalysis } from "~/components/HtmlAnalysis";
 import { ScriptAnalysis } from "~/components/ScriptAnalysis";
+import { Alert } from "~/components/ui/alert";
 
 export const meta: MetaFunction = () => [{ title: "HTTP Client" }];
 
@@ -39,6 +40,7 @@ export default function Index() {
   const [query, setQuery] = useState("");
   const [body, setBody] = useState("");
   const [response, setResponse] = useState<ResponseData | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<
     {
       html: string;
@@ -52,6 +54,7 @@ export default function Index() {
   }, []);
 
   const send = async () => {
+    setError(null);
     setResponse(null);
     setAnalysis(null);
     let target = url;
@@ -73,10 +76,15 @@ export default function Index() {
       }),
     });
     const data = (await res.json()) as ResponseData;
+    if (data.error) {
+      setError(data.error);
+      return;
+    }
     setResponse(data);
   };
 
   const analyze = async () => {
+    setError(null);
     setAnalysis(null);
     const res = await fetch("/api/analyze", {
       method: "POST",
@@ -159,6 +167,9 @@ export default function Index() {
             </div>
           )}
         </div>
+        {error && (
+          <Alert className="col-span-2">{error}</Alert>
+        )}
         {response && (
           <div className="space-y-2">
             <div className="text-sm font-medium">
